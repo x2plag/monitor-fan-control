@@ -1,0 +1,21 @@
+# Build outputs and local release packages
+**/bin/
+**/obj/
+release/
+*.exe
+*.dll
+*.pdb
+*.zip
+
+# Local state and development files
+settings.json
+*.tmp
+*.user
+*.suo
+.vs/
+.idea/
+
+# Captures and diagnostics are not part of the app source
+*.csv
+*.jsonl
+*.log

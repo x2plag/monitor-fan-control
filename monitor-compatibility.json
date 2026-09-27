@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "protocolProfile": {
+    "name": "LG fan controller profile",
+    "usbVendorId": "043E",
+    "usbProductId": "9A8A",
+    "hidUsagePage": "FF01",
+    "hidUsage": "0001",
+    "inputReportLength": 65,
+    "outputReportLength": 65,
+    "featureReportLength": 65,
+    "supportedFirmwareVersions": [
+      "0113",
+      "0117",
+      "0118",
+      "0202",
+      "0204",
+      "0607"
+    ]
+  },
+  "models": [
+    { "name": "32GS95UV-B", "firmware": "0202", "status": "hardware-tested" },
+    { "name": "27GS95QE", "firmware": "0202", "status": "firmware-match; untested" },
+    { "name": "32GS95UE", "firmware": "0202", "status": "firmware-match; untested" },
+    { "name": "34GS95QE", "firmware": "0202", "status": "firmware reported; fan uncertain; untested" },
+    { "name": "39GS95QE", "firmware": "0202", "status": "firmware-match; untested" },
+    { "name": "45GS96QB", "firmware": "0202", "status": "firmware-match; untested" },
+    { "name": "27GR93U", "firmware": "0117", "status": "static protocol match; untested" },
+    { "name": "27GR95QE", "firmware": "0117", "status": "reported firmware; untested" },
+    { "name": "27GR95UM", "firmware": "0202", "status": "firmware-match; untested" },
+    { "name": "45GR95QE", "firmware": "0113", "status": "firmware-match; untested" },
+    { "name": "32GQ950", "firmware": "0113", "status": "firmware-match; untested" },
+    { "name": "32GQ850", "firmware": "0113", "status": "firmware-match; untested" },
+    { "name": "48GQ900", "firmware": "0113 or 0118", "status": "firmware-match; untested" },
+    { "name": "27GX700A", "firmware": "0204", "status": "firmware match; fan uncertain; untested" },
+    { "name": "27GX790A", "firmware": "0204", "status": "firmware-match; untested" },
+    { "name": "45GX950A", "firmware": "0204", "status": "firmware-match; untested" },
+    { "name": "27GP950", "firmware": "0607", "status": "static protocol match; untested" },
+    { "name": "27GN950", "firmware": "0607", "status": "candidate; untested" },
+    { "name": "34GP950G", "firmware": "0607", "status": "candidate; untested" },
+    { "name": "38GL950G", "firmware": "0607", "status": "candidate; untested" },
+    { "name": "38GN950", "firmware": "0607", "status": "candidate; fan uncertain; untested" }
+  ],
+  "windowsModelNames": [
+    { "hardwareId": "GSM780F", "displayName": "32GS95UV family" }
+  ],
+  "editingNotes": [
+    "Keep this file beside the executable. If it is missing, the app restores its built-in default; existing files are used as-is. Restart the app after editing it.",
+    "Model names and firmware associations are informational and may not identify the exact connected monitor.",
+    "Only add firmware versions after independently verifying compatibility. A listed version enables fan commands for a matching controller."
+  ]
+}

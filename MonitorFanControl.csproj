@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>MonitorFanControl</AssemblyName>
+    <RootNamespace>MonitorFanControl</RootNamespace>
+    <AssemblyTitle>Monitor Fan Control</AssemblyTitle>
+    <Product>Monitor Fan Control</Product>
+    <Description>Independent fan control utility for selected LG monitors.</Description>
+    <Copyright>Copyright (c) 2026 ykorsten</Copyright>
+    <ApplicationIcon>Assets\MonitorFanControl.ico</ApplicationIcon>
+    <Version>1.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <DebugType>none</DebugType>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\MonitorFanControl.png" />
+    <Resource Include="Assets\MonitorFanControl.ico" />
+    <EmbeddedResource Include="monitor-compatibility.json"
+                      LogicalName="MonitorFanControl.monitor-compatibility.json" />
+    <Content Include="monitor-compatibility.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

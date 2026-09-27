@@ -1,0 +1,81 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag, for example v1.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Check version tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          [xml]$project = Get-Content -LiteralPath MonitorFanControl.csproj -Raw
+          $version = [string]$project.Project.PropertyGroup.Version
+          if ([string]::IsNullOrWhiteSpace($version) -or $env:RELEASE_TAG -ne "v$version") {
+            throw "The tag must match the project version (v$version)."
+          }
+          if ((git rev-parse HEAD).Trim() -ne $env:GITHUB_SHA) {
+            throw 'The tag must point to the current main commit.'
+          }
+      - name: Build release packages
+        shell: pwsh
+        run: ./build-release.ps1
+      - name: Create or refresh draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $version = $env:RELEASE_TAG.Substring(1)
+          $assets = @(
+            "release/MonitorFanControl-$version-portable-win-x64.zip",
+            "release/MonitorFanControl-$version-small-win-x64.zip",
+            'release/SHA256SUMS.txt'
+          )
+          foreach ($asset in $assets) {
+            if (-not (Test-Path -LiteralPath $asset)) { throw "Missing release asset: $asset" }
+          }
+
+          $readme = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/blob/$env:RELEASE_TAG/README.md#download-and-windows-smartscreen"
+          $changelog = gh api "repos/$env:GITHUB_REPOSITORY/releases/generate-notes" -f tag_name=$env:RELEASE_TAG --jq .body
+          if ($LASTEXITCODE -ne 0) { throw 'Generating release notes failed.' }
+          @(
+            'Use at your own risk. Hardware-tested only on the 32GS95UV-B; read the included safety notes and supported-monitor list.',
+            '',
+            "The executable is not code-signed yet, so Windows SmartScreen may warn that it is unrecognized. Compare the ZIP with SHA256SUMS.txt, unblock the ZIP in its Properties before extracting, or select **More info**, then **Run anyway**. See [Download and Windows SmartScreen]($readme).",
+            '',
+            $changelog
+          ) -join "`n" | Set-Content -LiteralPath release-notes.md -Encoding utf8
+
+          $title = "Monitor Fan Control $env:RELEASE_TAG"
+          $isDraft = gh release view $env:RELEASE_TAG --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            # Rerunning refreshes the existing draft instead of creating a second one.
+            if ($isDraft -ne 'true') { throw "Release $env:RELEASE_TAG is already published; release a new version instead." }
+            gh release edit $env:RELEASE_TAG --title $title --notes-file release-notes.md
+            if ($LASTEXITCODE -ne 0) { throw 'Updating the draft release failed.' }
+            gh release upload $env:RELEASE_TAG @assets --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Replacing the draft release assets failed.' }
+          }
+          else {
+            gh release create $env:RELEASE_TAG @assets --verify-tag --draft --title $title --notes-file release-notes.md
+            if ($LASTEXITCODE -ne 0) { throw 'Creating the draft release failed.' }
+          }
