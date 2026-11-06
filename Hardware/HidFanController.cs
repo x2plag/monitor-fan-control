@@ -29,7 +29,10 @@ internal sealed record DeviceIdentity(ushort VendorId, ushort ProductId, ushort 
     ushort UsagePage, ushort Usage, ushort InputReportLength, ushort OutputReportLength,
     ushort FeatureReportLength);
 
-internal sealed class HidFanController : IAsyncDisposable
+internal sealed record HidInterfaceDiagnostic(string Interface, string? Product,
+    DeviceIdentity? Identity, string? Error);
+
+internal sealed partial class HidFanController : IAsyncDisposable
 {
     private const ushort ExpectedVid = 0x043E;
     private const ushort ExpectedPid = 0x9A8A;
@@ -49,6 +52,8 @@ internal sealed class HidFanController : IAsyncDisposable
 
     private readonly SafeFileHandle _handle;
     private readonly FileStream _stream;
+    private readonly int _reportLength;
+    private readonly bool _allowWrites;
     private readonly SemaphoreSlim _exchangeLock = new(1, 1);
     // Each connection starts at a random tag so replies meant for another handle are unlikely to match.
     private byte _nextTag = (byte)Random.Shared.Next(1, 256);
@@ -56,10 +61,12 @@ internal sealed class HidFanController : IAsyncDisposable
 
     public DeviceIdentity Identity { get; }
 
-    private HidFanController(SafeFileHandle handle, DeviceIdentity identity)
+    private HidFanController(SafeFileHandle handle, DeviceIdentity identity, bool allowWrites = true)
     {
         _handle = handle;
         Identity = identity;
+        _reportLength = identity.OutputReportLength - 1;
+        _allowWrites = allowWrites;
         // Windows HID adds a one-byte Report ID to each 64-byte firmware report.
         _stream = new FileStream(handle, FileAccess.ReadWrite, bufferSize: 1, isAsync: true);
     }
@@ -67,14 +74,170 @@ internal sealed class HidFanController : IAsyncDisposable
     internal static bool IsFanInterfacePath(string? path) =>
         path?.Contains("vid_043e&pid_9a8a&mi_01", StringComparison.OrdinalIgnoreCase) == true;
 
-    public static HidFanController Connect()
+    // Descriptor inspection deliberately uses a zero-access handle. It sends no
+    // HID requests and does not relax the fan controller's connection policy.
+    public static IReadOnlyList<HidInterfaceDiagnostic> DiagnoseLgInterfaces()
     {
-        var paths = EnumerateHidPaths()
-            .Where(IsFanInterfacePath)
+        var result = new List<HidInterfaceDiagnostic>();
+        foreach (var path in EnumerateHidPaths().Where(path =>
+                     path.Contains("vid_043e&", StringComparison.OrdinalIgnoreCase)))
+        {
+            var part = path.Split('#').FirstOrDefault(part =>
+                part.Contains("vid_043e&", StringComparison.OrdinalIgnoreCase)) ?? "LG HID";
+            using var handle = Native.CreateFileW(path, 0,
+                Native.FileShareRead | Native.FileShareWrite, IntPtr.Zero,
+                Native.OpenExisting, 0, IntPtr.Zero);
+            if (handle.IsInvalid)
+            {
+                result.Add(new(part, null, null, $"Open error {Marshal.GetLastWin32Error()}"));
+                continue;
+            }
+            var attributes = new Native.HidAttributes { Size = (uint)Marshal.SizeOf<Native.HidAttributes>() };
+            if (!Native.HidD_GetAttributes(handle, ref attributes) ||
+                !Native.HidD_GetPreparsedData(handle, out var preparsed))
+            {
+                result.Add(new(part, null, null, $"Descriptor error {Marshal.GetLastWin32Error()}"));
+                continue;
+            }
+            try
+            {
+                var status = Native.HidP_GetCaps(preparsed, out var caps);
+                if (status != 0x00110000)
+                {
+                    result.Add(new(part, null, null, $"HID caps status 0x{status:X8}"));
+                    continue;
+                }
+                var name = new StringBuilder(128);
+                var hasName = Native.HidD_GetProductString(handle, name, name.Capacity * 2);
+                result.Add(new(part, hasName ? name.ToString() : null,
+                    new DeviceIdentity(attributes.VendorId, attributes.ProductId,
+                        attributes.VersionNumber, caps.UsagePage, caps.Usage,
+                        caps.InputReportByteLength, caps.OutputReportByteLength,
+                        caps.FeatureReportByteLength), null));
+            }
+            finally
+            {
+                Native.HidD_FreePreparsedData(preparsed);
+            }
+        }
+        return result;
+    }
+
+    public static async Task ObserveLg39Async()
+    {
+        var paths = EnumerateHidPaths().Where(path => path.Contains(
+            "vid_043e&pid_9c33&mi_01", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (paths.Length != 1)
+            throw new FanToolException($"Expected one 39GX950B candidate HID interface; found {paths.Length}.");
+        using var handle = Native.CreateFileW(paths[0], Native.GenericRead,
+            Native.FileShareRead | Native.FileShareWrite, IntPtr.Zero,
+            Native.OpenExisting, Native.FileFlagOverlapped, IntPtr.Zero);
+        if (handle.IsInvalid)
+            throw Native.Error("Opening candidate for input only");
+        if (!Native.HidD_GetPreparsedData(handle, out var preparsed))
+            throw Native.Error("Reading candidate HID descriptor");
+        Native.HidCaps caps;
+        try
+        {
+            if (Native.HidP_GetCaps(preparsed, out caps) != 0x00110000 ||
+                caps.UsagePage != 0xFF01 || caps.Usage != 1 ||
+                caps.InputReportByteLength != 33 || caps.OutputReportByteLength != 33 ||
+                caps.FeatureReportByteLength != 65)
+                throw new FanToolException("The candidate descriptor changed; observation stopped.");
+        }
+        finally
+        {
+            Native.HidD_FreePreparsedData(preparsed);
+        }
+        var feature = new byte[caps.FeatureReportByteLength];
+        // Standard HID GET_REPORT only; no vendor output report is sent.
+        if (Native.HidD_GetFeature(handle, feature, feature.Length))
+            Console.WriteLine($"HID feature report: {Convert.ToHexString(feature)}");
+        else
+            Console.WriteLine($"HID feature report unavailable (Windows error {Marshal.GetLastWin32Error()}).");
+        Console.WriteLine("Listening to incoming HID reports for 15 seconds; no output reports will be sent.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await using var stream = new FileStream(handle, FileAccess.Read, bufferSize: 1, isAsync: true);
+        var count = 0;
+        try
+        {
+            while (count < 50)
+            {
+                var input = new byte[caps.InputReportByteLength];
+                var read = await stream.ReadAsync(input, timeout.Token);
+                if (read == 0)
+                    break;
+                Console.WriteLine($"Input {++count}: {Convert.ToHexString(input.AsSpan(0, read))}");
+            }
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+        }
+        Console.WriteLine($"Observation complete: {count} incoming reports; no output reports sent.");
+    }
+
+    public static void ObserveLg39I2cFeatureReport()
+    {
+        var paths = EnumerateHidPaths().Where(path => path.Contains(
+            "vid_043e&pid_9c33&mi_00", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (paths.Length != 1)
+            throw new FanToolException($"Expected one 39GX950B HID-I2C interface; found {paths.Length}.");
+
+        using var handle = Native.CreateFileW(paths[0], Native.GenericRead,
+            Native.FileShareRead | Native.FileShareWrite, IntPtr.Zero,
+            Native.OpenExisting, Native.FileFlagOverlapped, IntPtr.Zero);
+        if (handle.IsInvalid)
+            throw Native.Error("Opening the candidate HID-I2C interface for a feature read");
+        var attributes = new Native.HidAttributes { Size = (uint)Marshal.SizeOf<Native.HidAttributes>() };
+        if (!Native.HidD_GetAttributes(handle, ref attributes))
+            throw Native.Error("Reading HID-I2C identity");
+        if (!Native.HidD_GetPreparsedData(handle, out var preparsed))
+            throw Native.Error("Reading HID-I2C descriptor");
+
+        Native.HidCaps caps;
+        try
+        {
+            if (Native.HidP_GetCaps(preparsed, out caps) != 0x00110000 ||
+                attributes.VendorId != ExpectedVid || attributes.ProductId != 0x9C33 ||
+                attributes.VersionNumber != 0x0111 || caps.UsagePage != 0xFF00 || caps.Usage != 1 ||
+                caps.InputReportByteLength != 65 || caps.OutputReportByteLength != 65 ||
+                caps.FeatureReportByteLength != 65)
+                throw new FanToolException("The HID-I2C descriptor does not match the observed 39GX950B profile; no feature request was sent.");
+        }
+        finally
+        {
+            Native.HidD_FreePreparsedData(preparsed);
+        }
+
+        var report = new byte[caps.FeatureReportByteLength];
+        // A standard HID GET_FEATURE only; this path sends no output/feature report.
+        if (!Native.HidD_GetFeature(handle, report, report.Length))
+            throw Native.Error("Reading the HID-I2C feature report");
+        Console.WriteLine($"HID-I2C GET_FEATURE ({report.Length} bytes): {Convert.ToHexString(report)}");
+    }
+
+    public static HidFanController Connect() => ConnectCore(candidate39: false);
+
+    // Experimental status-only connection. This never admits the candidate to
+    // the normal GUI/--set path, even if a valid status response is received.
+    public static HidFanController ConnectLg39StatusProbe() => ConnectCore(candidate39: true);
+
+    private static HidFanController ConnectCore(bool candidate39)
+    {
+        var allPaths = EnumerateHidPaths();
+        var paths = allPaths
+            .Where(path => candidate39
+                ? path.Contains("vid_043e&pid_9c33&mi_01", StringComparison.OrdinalIgnoreCase)
+                : IsFanInterfacePath(path))
             .ToArray();
 
         if (paths.Length == 0)
+        {
+            if (!candidate39 && allPaths.Any(path => path.Contains(
+                    "vid_043e&pid_9c33&mi_01", StringComparison.OrdinalIgnoreCase)))
+                throw new FanToolException("LG 39GX950B USB controller detected (043E:9C33). Fan status is not decoded for this controller. Controls are disabled; use --diagnose for descriptor inspection or --probe39 for an explicit status-only experiment.");
             throw new FanToolException("No supported LG fan controller is connected over USB. Check the USB cable, hub or KVM switch; the app reconnects automatically.");
+        }
         // Identical controllers cannot be told apart or linked to a display, so none is controlled.
         if (paths.Length > 1)
             throw new FanToolException($"{paths.Length} monitors with this fan controller are connected over USB. The app cannot tell them apart, so it controls none of them. Connect only one of these monitors over USB.");
@@ -115,17 +278,21 @@ internal sealed class HidFanController : IAsyncDisposable
                 caps.InputReportByteLength, caps.OutputReportByteLength,
                 caps.FeatureReportByteLength);
 
-            if (identity.VendorId != ExpectedVid || identity.ProductId != ExpectedPid ||
-                !MonitorCompatibilityFile.SupportsFirmwareVersion(identity.Version) ||
+            var expectedPid = candidate39 ? (ushort)0x9C33 : ExpectedPid;
+            var expectedIoLength = candidate39 ? 33 : 65;
+            var acceptsFirmware = candidate39 ? identity.Version == 0x0111 :
+                MonitorCompatibilityFile.SupportsFirmwareVersion(identity.Version);
+            if (identity.VendorId != ExpectedVid || identity.ProductId != expectedPid ||
+                !acceptsFirmware ||
                 identity.UsagePage != ExpectedUsagePage || identity.Usage != ExpectedUsage ||
-                identity.InputReportLength != 65 || identity.OutputReportLength != 65 ||
+                identity.InputReportLength != expectedIoLength || identity.OutputReportLength != expectedIoLength ||
                 identity.FeatureReportLength != 65)
             {
                 throw new FanToolException(
                     $"The USB descriptor does not match a supported fan-controller profile (VID {identity.VendorId:X4}, PID {identity.ProductId:X4}, firmware {identity.Version:X4}, usage {identity.UsagePage:X4}/{identity.Usage:X4}, reports {identity.InputReportLength}/{identity.OutputReportLength}/{identity.FeatureReportLength} bytes). Nothing was changed. See monitor-compatibility.json for accepted firmware versions.");
             }
 
-            return new HidFanController(handle, identity);
+            return new HidFanController(handle, identity, allowWrites: !candidate39);
         }
         catch
         {
@@ -137,14 +304,57 @@ internal sealed class HidFanController : IAsyncDisposable
     public async Task<FanStatus> ReadStatusAsync(CancellationToken cancellationToken)
     {
         var payload = await ExchangeAsync(GetFanStatus, ReadOnlyMemory<byte>.Empty, cancellationToken);
+        if (!_allowWrites && (payload.Length != 6 || payload[5] != 9))
+            throw new FanToolException($"39GX950B replied with a valid SC envelope but an unrecognized status payload ({payload.Length} byte(s): {Convert.ToHexString(payload)}). The legacy fan status requires six bytes with a firmware marker of 09. Fan duty/RPM/temperature cannot be inferred; setting commands remain disabled.");
         if (payload.Length != 6 || payload[5] != 9)
             throw new FanToolException("The status response has an unexpected format. No new setting was sent.");
 
         return new FanStatus(payload[0], payload[1], payload[2], payload[3], payload[4], payload[5]);
     }
 
+    public byte[] ProbeLg39FeatureStatus()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_allowWrites || Identity.ProductId != 0x9C33 || Identity.FeatureReportLength != 65)
+            throw new FanToolException("Feature-status experiments require the exact status-only 39GX950B connection.");
+        var tag = _nextTag++;
+        var request = new byte[65];
+        BuildPacket(GetFanStatus, tag, ReadOnlySpan<byte>.Empty).CopyTo(request, 1);
+        // The opcode and payload are the same read-only status query as --probe39;
+        // only the advertised standard HID transfer channel differs.
+        if (!Native.HidD_SetFeature(_handle, request, request.Length))
+            throw Native.Error("Sending the feature-channel status query");
+        var reply = new byte[65];
+        if (!Native.HidD_GetFeature(_handle, reply, reply.Length))
+            throw Native.Error("Reading the feature-channel status reply");
+        Console.WriteLine($"Feature-channel raw reply: {Convert.ToHexString(reply)}");
+        return ScHidPacket.DecodeReport(reply, GetFanStatus, tag);
+    }
+
+    public async Task ProbeLg39ReadCommandAsync(byte command, CancellationToken cancellationToken)
+    {
+        if (_allowWrites || Identity.ProductId != 0x9C33 || Identity.Version != 0x0111)
+            throw new FanToolException("Read-only command probing requires the exact 39GX950B firmware 0111 profile.");
+        if (command == GetFanStatus)
+        {
+            var status = await ReadStatusAsync(cancellationToken);
+            Console.WriteLine($"Fan status response: duty={status.CurrentDuty}, mode={status.Mode}, sensorRaw={status.SensorValue}, derivedRaw={status.DerivedValue}, gpioRaw={status.GpioValue}, constant={status.FirmwareConstant}");
+            return;
+        }
+        // These opcodes were statically identified as read handlers in the
+        // published sibling-controller firmware. Their meanings still need
+        // confirmation on 39GX950B firmware 0111. No write opcode is admitted.
+        if (command is not (0xC3 or 0xC4 or 0xC6 or 0xCB or 0xCC or 0xCE or 0xD1))
+            throw new FanToolException($"Opcode {command:X2} is not on the reference read-only allowlist.");
+
+        var payload = await ExchangeAsync(command, ReadOnlyMemory<byte>.Empty, cancellationToken);
+        Console.WriteLine($"Read-only query {command:X2}: {payload.Length} byte(s), {Convert.ToHexString(payload)}");
+    }
+
     public async Task SetDutyAsync(byte duty, CancellationToken cancellationToken)
     {
+        if (!_allowWrites)
+            throw new FanToolException("The 39GX950B experimental connection is status-only. Fan-setting commands are disabled.");
         if (duty is < FanDutyLimits.Minimum or > FanDutyLimits.Maximum)
             throw new ArgumentOutOfRangeException(nameof(duty), "The fan setting must be between 25 and 100.");
 
@@ -172,10 +382,12 @@ internal sealed class HidFanController : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        var validDutyPayload = command == SetFanDuty && payload.Length == 2 && payload.Span[0] == 1 &&
+            (_allowWrites && payload.Span[1] is >= FanDutyLimits.Minimum and <= FanDutyLimits.Maximum);
         if ((command == GetFanStatus && payload.Length != 0) ||
-            (command == SetFanDuty && (payload.Length != 2 || payload.Span[0] != 1 ||
-                                       payload.Span[1] is < FanDutyLimits.Minimum or > FanDutyLimits.Maximum)) ||
-            (command != GetFanStatus && command != SetFanDuty))
+            (command == SetFanDuty && !validDutyPayload) ||
+            (command != GetFanStatus && command != SetFanDuty &&
+                !(!_allowWrites && command is 0xC3 or 0xC4 or 0xC6 or 0xCB or 0xCC or 0xCE or 0xD1 && payload.Length == 0)))
             throw new InvalidOperationException("The request is outside the supported fan protocol interface.");
 
         await _exchangeLock.WaitAsync(cancellationToken);
@@ -200,13 +412,13 @@ internal sealed class HidFanController : IAsyncDisposable
             var tag = _nextTag++;
             if (_nextTag == 0)
                 _nextTag = 1;
-            var firmwarePacket = BuildPacket(command, tag, payload.Span);
+            var firmwarePacket = BuildPacket(command, tag, payload.Span, _reportLength);
 
-            var outputReport = new byte[HidReportLength + 1];
+            var outputReport = new byte[_reportLength + 1];
             outputReport[0] = ReportId;
             firmwarePacket.CopyTo(outputReport, 1);
 
-            var inputReport = new byte[HidReportLength + 1];
+            var inputReport = new byte[_reportLength + 1];
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(4));
             var readTask = _stream.ReadAsync(inputReport.AsMemory(), timeout.Token).AsTask();
@@ -242,18 +454,16 @@ internal sealed class HidFanController : IAsyncDisposable
                 }
             }
 
-            var reply = inputReport.AsSpan(1, HidReportLength);
-            if (inputReport[0] != ReportId || reply[0] != 0x52 ||
-                reply[1] != command || reply[2] != tag || reply[3] != 6)
-                throw new FanToolException("The HID response does not match this request. Read the status again before repeating a command.");
-
-            byte checksum = 0;
-            for (var i = 0; i < 10; i++)
-                checksum ^= reply[i];
-            if (checksum != reply[10])
-                throw new FanToolException("The HID response checksum is invalid. Read the status again.");
-
-            return reply.Slice(4, 6).ToArray();
+            try
+            {
+                return ScHidPacket.DecodeReport(inputReport, command, tag);
+            }
+            catch (InvalidDataException ex)
+            {
+                throw new FanToolException(ex.Message +
+                    (_allowWrites ? " Read the status again before repeating a command." :
+                        $" Candidate response: {Convert.ToHexString(inputReport)}. No fan-setting command was sent."));
+            }
         }
         finally
         {
@@ -263,12 +473,13 @@ internal sealed class HidFanController : IAsyncDisposable
         }
     }
 
-    private static byte[] BuildPacket(byte command, byte tag, ReadOnlySpan<byte> payload)
+    private static byte[] BuildPacket(byte command, byte tag, ReadOnlySpan<byte> payload,
+        int reportLength = HidReportLength)
     {
-        if (payload.Length > 0x38)
+        if (reportLength < 11 || payload.Length > reportLength - 8)
             throw new ArgumentOutOfRangeException(nameof(payload));
 
-        var packet = new byte[HidReportLength];
+        var packet = new byte[reportLength];
         packet[0] = 0x53;
         packet[1] = 0x43;
         packet[2] = command;
@@ -413,6 +624,18 @@ internal sealed class HidFanController : IAsyncDisposable
         [DllImport("hid.dll", EntryPoint = "HidD_GetAttributes", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool HidD_GetAttributes(SafeFileHandle handle, ref HidAttributes attributes);
+
+        [DllImport("hid.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HidD_GetProductString(SafeFileHandle handle, StringBuilder buffer, int bufferLength);
+
+        [DllImport("hid.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HidD_GetFeature(SafeFileHandle handle, [In, Out] byte[] report, int reportLength);
+
+        [DllImport("hid.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool HidD_SetFeature(SafeFileHandle handle, [In] byte[] report, int reportLength);
 
         [DllImport("hid.dll", EntryPoint = "HidD_GetPreparsedData", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
