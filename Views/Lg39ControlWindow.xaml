@@ -1,0 +1,75 @@
+<Window x:Class="MonitorFanControl.Lg39ControlWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LG 39GX950B — вентилятор" Width="580" Height="480"
+        MinWidth="520" MinHeight="460" WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Canvas}" Foreground="{DynamicResource Text}"
+        FontFamily="Segoe UI" FontSize="14" Closing="Window_Closing">
+    <Window.Resources>
+        <Style x:Key="ControlButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaised}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="18,12" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="9"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.85" /></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4" /></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderThickness" Value="2" /></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="26">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+            <RowDefinition Height="*" /><RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Управление вентилятором" FontSize="25" FontWeight="SemiBold" />
+            <TextBlock Text="LG UltraGear 39GX950B" Foreground="{DynamicResource Muted}" Margin="0,5,0,22" />
+        </StackPanel>
+        <Border Grid.Row="1" Background="{DynamicResource Surface}" CornerRadius="12" Padding="18" Margin="0,0,0,20">
+            <StackPanel>
+                <TextBlock x:Name="StatusText" Text="Авто" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock x:Name="DetailText" Text="Тихий режим включается только по кнопке «Тихо»."
+                           Foreground="{DynamicResource Muted}" Margin="0,8,0,12" />
+                <TextBlock Text="Экспериментальный режим. Свежие обороты и температура не измеряются."
+                           FontSize="13" Foreground="{DynamicResource Muted}" />
+                <ProgressBar x:Name="BusyProgress" Height="3" Margin="0,14,0,0" IsIndeterminate="True" Visibility="Collapsed" />
+            </StackPanel>
+        </Border>
+        <StackPanel Grid.Row="2">
+            <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="12" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                <Button x:Name="QuietButton" Content="Тихо" Style="{StaticResource ControlButton}"
+                        Background="{DynamicResource Accent}" Foreground="{DynamicResource Canvas}"
+                        Click="QuietButton_Click" AutomationProperties.AutomationId="QuietButton" />
+                <Button x:Name="RestoreButton" Grid.Column="2" Content="Авто" Style="{StaticResource ControlButton}"
+                        Click="RestoreButton_Click" AutomationProperties.AutomationId="RestoreButton" />
+            </Grid>
+            <TextBlock Text="Без таймера отключения. «Авто» возвращает штатную автоматику."
+                       Foreground="{DynamicResource Muted}" FontSize="13" Margin="0,14,0,0" />
+        </StackPanel>
+        <Grid Grid.Row="3" Margin="0,18,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /></Grid.ColumnDefinitions>
+            <TextBlock Text="Меню закроется автоматически" FontSize="12" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="USB должен быть подключён" FontSize="12" Foreground="{DynamicResource Muted}"
+                       HorizontalAlignment="Right" VerticalAlignment="Center" Margin="12,0,0,0" />
+        </Grid>
+    </Grid>
+</Window>

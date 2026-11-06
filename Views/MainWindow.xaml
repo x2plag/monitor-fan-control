@@ -1,7 +1,7 @@
 <Window x:Class="MonitorFanControl.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Monitor Fan Control" Height="440" Width="485"
+        Title="Monitor Fan Control — custom diagnostics" Height="485" Width="600"
         MinHeight="440" MinWidth="485" WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize" Background="{DynamicResource Canvas}"
         Foreground="{DynamicResource Text}" FontFamily="Segoe UI" FontSize="13"
@@ -73,7 +73,7 @@
                     </StackPanel>
                 </Grid>
                 <TextBlock x:Name="StatusDetail" Text="Waiting for controller readback…"
-                           Foreground="{DynamicResource Muted}" FontSize="11" MinHeight="16" />
+                           Foreground="{DynamicResource Muted}" FontSize="11" MinHeight="16" TextWrapping="Wrap" />
                 <Slider x:Name="DutySlider" Style="{DynamicResource FanDutySlider}"
                         Minimum="25" Maximum="100" Value="25"
                         TickFrequency="1" IsSnapToTickEnabled="True" IsMoveToPointEnabled="True"

@@ -46,7 +46,9 @@ public partial class MainWindow : Window
         // Idle polls publish an empty message; keep a recent result readable instead of clearing it.
         if (snapshot.Message.Length > 0 || DateTime.UtcNow - _statusShownAt >= StatusHoldTime)
             SetStatusText(snapshot.Message, snapshot.IsError);
-        ConnectionLabel.Text = snapshot.IsConnected ? "Connected" : "Not connected";
+        ConnectionLabel.Text = snapshot.IsConnected ? "Connected" :
+            snapshot.Message.StartsWith("LG 39GX950B USB controller detected", StringComparison.Ordinal)
+                ? "USB detected; fan unavailable" : "Not connected";
         ConnectionDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty,
             snapshot.IsConnected ? "Success" : "Disconnected");
         var target = _settingsStore.Load().TargetDuty;
