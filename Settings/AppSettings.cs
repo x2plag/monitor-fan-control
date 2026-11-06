@@ -13,7 +13,7 @@ internal static class FanDutyLimits
 internal sealed class AppSettings
 {
     public int? TargetDuty { get; set; }
-    public bool KeepTargetApplied { get; set; } = true;
+    public bool KeepTargetApplied { get; set; } = false;
 
     public AppSettings Clone() => new() { TargetDuty = TargetDuty, KeepTargetApplied = KeepTargetApplied };
 }
@@ -31,7 +31,7 @@ internal sealed class AppSettingsStore
     public AppSettingsStore()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        _settingsPath = Path.Combine(localAppData, "MonitorFanControl", "settings.json");
+        _settingsPath = Path.Combine(localAppData, "MonitorFanControl-Custom", "settings.json");
     }
 
     public AppSettings Load()
@@ -124,7 +124,7 @@ internal sealed class AppSettingsStore
 internal static class WindowsStartupRegistration
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "MonitorFanControl";
+    private const string ValueName = "MonitorFanControlCustom";
 
     // An entry left by a copy in another folder does not start this copy, so it does not count.
     public static bool IsEnabled()
