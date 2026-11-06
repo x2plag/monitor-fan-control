@@ -1,96 +1,40 @@
-# Monitor Fan Control
+# LG 39GX950B Quiet — 1.0.1-self-recovery
 
-An independent Windows tray app and command-line tool for reading and setting fan duty on selected LG monitors. **This project is not affiliated with, endorsed by, or supported by LG Electronics.**
+Experimental Windows x64 utility for **LG UltraGear 39GX950B**. Not affiliated with LG. Tested on one monitor: USB `043E:9C33`, revision `0111`, scaler `3.11.0`, MICOM `1.11`. Read [SAFETY.md](SAFETY.md).
 
-> **Use at your own risk.** This app sends undocumented commands to a monitor fan controller and can override automatic fan behavior. The selected duty range is not an LG safety rating. The app does not provide reliable fan-speed or temperature feedback. Read [Safety and limitations](SAFETY.md) before use.
+## English
 
-## Why this app exists
+Download **LG-Quiet-1.0.1-self-recovery-win-x64.zip** from the [latest release](https://github.com/x2plag/monitor-fan-control/releases/tag/v1.0.1-self-recovery). The portable ZIP includes the .NET runtime.
 
-This app began as a way to adjust fan duty without changing monitor firmware or enabling the service menu. It communicates with the fan controller over USB, so **the service menu does not need to be activated**.
+1. Extract every file into a writable folder. Connect the monitor's USB data cable and close other monitor-control applications.
+2. Run **Start.cmd**. Check that the service menu is closed and type **YES** to record your own confirmation for this session.
+3. Click **«Применить и выйти» (Apply and exit)**.
 
-## Features
+The app prepares the initial state automatically. If USB is absent, connecting it within two minutes continues the request. The service menu may appear briefly and closes automatically. After success the window and helper processes exit **without restoring Auto**. There is no background keeper or automatic repeated lowering. Start.cmd is required; launching the EXE alone opens the legacy tray interface.
 
-- View live controller duty, connection status, and the monitor information reported by Windows.
-- Set and save a target with the slider or one-shot command-line options.
-- Reapply the saved target when the controller changes it, if enabled.
-- Run in the notification area and optionally start hidden with Windows.
-- Verify the controller readback after each write.
+Logs: `%LOCALAPPDATA%\MonitorFanControl.Quiet\logs`. Cached RPM is not live tachometry. Temperature, cooling protection, complete fault/Auto recovery and persistence after power cycling are unverified.
 
-## Compatibility
+## Русский
 
-The app has been hardware-tested only with the **LG UltraGear 32GS95UV-B**, firmware `0202`. Other models in [Supported monitors](SUPPORTED_MONITORS.md) are untested compatibility candidates. A listed firmware association does not confirm that a particular retail monitor has that firmware or contains a physical fan.
+Скачайте **LG-Quiet-1.0.1-self-recovery-win-x64.zip** из [последнего релиза](https://github.com/x2plag/monitor-fan-control/releases/tag/v1.0.1-self-recovery). .NET уже включён.
 
-The app checks the controller's USB identity, firmware version, and HID report sizes before sending a command. The monitor name shown in the app comes from Windows and may not uniquely identify the physical monitor connected to the fan controller.
+1. Распакуйте все файлы в доступную для записи папку. Подключите USB-кабель передачи данных от монитора и закройте другие программы управления монитором.
+2. Запустите **Start.cmd**. Проверьте, что сервисное меню закрыто, и введите **YES** — это ваше подтверждение для данного сеанса.
+3. Нажмите **«Применить и выйти»**.
 
-Connect only one monitor with this fan controller to a PC over USB. With two or more, the app cannot tell them apart or link them to a display, so it controls none of them and says so. Other monitors, including LG monitors connected only by a video cable, do not affect it.
+Программа сама подготовит исходное состояние. Если USB отсутствует, подключите его в течение двух минут. Сервисное меню может кратко появиться и закроется автоматически. После успеха окно и вспомогательные процессы завершатся **без возврата в Авто**. Фонового процесса и автоматических повторных снижений нет. EXE без параметров открывает старый tray-интерфейс; запускайте Start.cmd.
 
-The human-editable [`monitor-compatibility.json`](monitor-compatibility.json) sits beside the executable and lists accepted firmware versions and model information. If the file is missing, the app restores its built-in default. Existing files are used as-is, so edits are preserved. Adding a firmware version allows commands to be sent to any matching controller that reports that version. Only change this file if you understand and have independently verified the compatibility; restart the app after editing it.
+Экспериментальная версия, проверенная на одном мониторе. Свежие обороты, температура, тепловая защита, полный возврат в Авто при сбоях и сохранение после отключения питания не подтверждены. Журналы: `%LOCALAPPDATA%\MonitorFanControl.Quiet\logs`.
 
-## Download and Windows SmartScreen
+## Source and build
 
-Download the release ZIP only from the [Releases page](https://github.com/ykorsten/monitor-fan-control/releases). The executable is not code-signed yet, so Windows SmartScreen and some browsers may warn that it is unrecognized or not commonly downloaded. This warning is based on download reputation; it does not mean a problem was found.
+Production source is copied unchanged from `63ab5d436731d63e0e6e2229afad1e3605dfa4b6`. The released executable has SHA-256 `28ec4da70a2424279f15376f0c059220cac11fc15c001a0ee6e02fd165ea4ca7`. Packaging, launchers and these public instructions are separate from that source snapshot. A local rebuild is not claimed to reproduce the released EXE byte for byte.
 
-1. Optionally, compare the ZIP's checksum with `SHA256SUMS.txt` from the same release. Letter case does not matter.
-
-   ```powershell
-   Get-FileHash .\MonitorFanControl-1.0-portable-win-x64.zip -Algorithm SHA256
-   ```
-
-2. Before extracting, right-click the ZIP, select **Properties**, check **Unblock**, and select **OK**. The extracted files are then not marked as downloaded from the internet. In PowerShell, `Unblock-File .\MonitorFanControl-1.0-portable-win-x64.zip` does the same.
-3. If SmartScreen still appears when you start the app, select **More info**, then **Run anyway**.
-
-## Desktop app and tray
-
-Connect the monitor with a USB data cable, extract a release ZIP, and start `MonitorFanControl.exe`. Move the slider and release it to apply and save a target. On first launch, the app saves the current duty as its initial target once the reading has held steady for a few seconds. Automatic target correction is enabled by default and may place the controller in manual mode at that duty. See [Safety and limitations](SAFETY.md) before use.
-
-The window reads the controller once per second. When the window is hidden in the tray, it reads every 10 seconds. Repeated automatic corrections are limited to once every 10 seconds. Turn off **Keep this target applied automatically** to continue reading status without correcting the fan setting; select **Apply** to send the saved target again without moving the slider.
-
-If the USB connection drops, for example when a KVM switch selects another PC, the app shows **Not connected**. The monitor may change its fan setting in the meantime; the tested 32GS95UV-B did after a KVM switch. The app reconnects as soon as Windows reports the controller again and, with automatic correction on, reapplies the saved target if the controller changed. With automatic correction off, select **Apply** to restore it. If another PC also runs this app, that PC applies its own saved target while it is connected.
-
-Closing the window hides it in the tray. Double-click the tray icon or select **Open fan control** to show it again. The tray menu lets you toggle automatic correction, enable **Start with Windows**, and **Exit**. Windows startup applies to the current user and launches the app hidden in the tray. After moving the app to another folder, turn **Start with Windows** on again from the new location. Exiting stops monitoring and further corrections; the last manual setting may remain active.
-
-The current duty and connection state appear in the tray tooltip. Settings are stored at `%LocalAppData%\MonitorFanControl\settings.json`.
-
-## Command-line interface
-
-Run these commands from PowerShell in the folder containing the executable:
+On Windows with the .NET 10 SDK:
 
 ```powershell
-.\MonitorFanControl.exe --read
-.\MonitorFanControl.exe --set 45
-.\MonitorFanControl.exe --help
+dotnet publish MonitorFanControl.csproj -c Release -o publish -p:Version=1.0.1-self-recovery
+Copy-Item Start.cmd, Start.ps1 publish
 ```
 
-| Command | Result |
-| --- | --- |
-| `--read` | Reads once and prints the controller duty, such as `45`. |
-| `--set 45` | Saves `45` as the target, sets the duty, and reads it back for up to 5 seconds while the controller settles. |
-| `--help` | Shows command usage without accessing the monitor. |
-
-CLI commands are one-shot: they exit without opening the app window or tray icon. `--set` saves the target used by the tray app but does not change the automatic-correction preference. Values outside **25–100** are rejected. The CLI can be used while the tray app is running; device requests are serialized. A successful command exits with code `0`; controller errors or an unconfirmed write exit with code `1`; invalid arguments exit with code `2`.
-
-PowerShell may return to the prompt before this Windows GUI executable finishes. For scripts that need its output and exit code, use `Start-Process -Wait -PassThru` with standard-output and standard-error redirection.
-
-## Build and downloads
-
-On Windows with the .NET 10 SDK installed, build the app with:
-
-```powershell
-dotnet build MonitorFanControl.csproj --configuration Release
-```
-
-Run `build-release.ps1` to create local ZIP packages and checksums. The small package requires the **.NET 10 Desktop Runtime for Windows x64**; the portable package includes it and is about 70 MB. Neither package includes monitor firmware. See Microsoft's [single-file deployment documentation](https://learn.microsoft.com/dotnet/core/deploying/single-file/overview) and [.NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
-
-GitHub Actions builds the app on Windows for pushes and pull requests. To prepare a GitHub release, push a tag matching the project version (for example `v1.0`), then run **Actions → Prepare release** on `main` with that tag. The workflow builds the packages and creates a **draft** release; running it again for the same tag refreshes that draft. GitHub provides the source archives automatically. Review the files and notes, then select **Publish release** when ready. Normal pushes do not publish releases.
-
-## Safety and limitations
-
-The duty display does not measure fan RPM or temperature. The **25–100** range is an app input range, not a safety rating. Automatic correction can override the monitor's own fan behavior, and exiting the app does not explicitly restore automatic mode. Read [SAFETY.md](SAFETY.md) for the full limitations. The executable is unsigned, so Windows may show an unknown publisher warning; see [Download and Windows SmartScreen](#download-and-windows-smartscreen).
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for build and contribution guidance. The app uses .NET/WPF, Windows Forms for the tray icon, and Windows HID/SetupAPI.
-
-## License
-
-Released under the MIT License. See [LICENSE.txt](LICENSE.txt).
+Run `publish\Start.cmd`. This source snapshot contains the application and resources; research captures and private operator admission are excluded. MIT License: [LICENSE.txt](LICENSE.txt).

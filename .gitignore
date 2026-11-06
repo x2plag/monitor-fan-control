@@ -2,6 +2,10 @@
 **/bin/
 **/obj/
 release/
+custom-build/
+research-build/
+user-control/
+diagnostics/
 *.exe
 *.dll
 *.pdb
@@ -19,3 +23,16 @@ settings.json
 *.csv
 *.jsonl
 *.log
+.build-user/
+menu-context-build/
+microphone-build/
+short-ramp-build/
+short-control-build/
+policy-diagnostic-build/
+.build-menu-platform/
+.build-closed-process/
+closed-hold-build/
+.build-closed-cleanup/
+.build-capture-monitor/
+.build-late-factory/
+.build-minimum-quiet/

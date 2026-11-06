@@ -6,8 +6,8 @@ namespace MonitorFanControl;
 
 public partial class App : System.Windows.Application
 {
-    private const string InstanceMutexName = @"Local\MonitorFanControl.Instance";
-    private const string ShowWindowEventName = @"Local\MonitorFanControl.ShowWindow";
+    private const string InstanceMutexName = @"Local\MonitorFanControl.Custom.Instance";
+    private const string ShowWindowEventName = @"Local\MonitorFanControl.Custom.ShowWindow";
 
     private AppSettingsStore? _settingsStore;
     private FanControlService? _service;
@@ -24,6 +24,44 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        if (ApplyExitCommand.IsRequested(e.Args))
+        {
+            if (!ApplyExitCommand.IsValid(e.Args))
+            {
+                Environment.ExitCode = 2;
+                Shutdown();
+                return;
+            }
+            _instanceMutex = new Mutex(initiallyOwned: true, @"Local\MonitorFanControl.Lg39Control.Instance", out _ownsMutex);
+            if (!_ownsMutex)
+            {
+                System.Windows.MessageBox.Show("Другое окно управления LG уже открыто. Заверши его перед запуском «Применить и выйти».", "Применение не начато");
+                Shutdown();
+                return;
+            }
+            RefreshTheme();
+            MainWindow = new Lg39ApplyExitWindow();
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            MainWindow.Show();
+            return;
+        }
+
+        if (e.Args.SequenceEqual(new[] { "--lg39-control" }))
+        {
+            _instanceMutex = new Mutex(initiallyOwned: true, @"Local\MonitorFanControl.Lg39Control.Instance", out _ownsMutex);
+            if (!_ownsMutex)
+            {
+                Lg39ControlWindow.ShowExisting();
+                Shutdown();
+                return;
+            }
+            RefreshTheme();
+            MainWindow = new Lg39ControlWindow();
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
+            MainWindow.Show();
+            return;
+        }
 
         if (CommandLine.IsRequested(e.Args))
         {

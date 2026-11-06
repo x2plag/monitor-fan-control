@@ -42,6 +42,7 @@
     { "name": "38GN950", "firmware": "0607", "status": "candidate; fan uncertain; untested" }
   ],
   "windowsModelNames": [
+    { "hardwareId": "GSM7861", "displayName": "39GX950B (status protocol under investigation)" },
     { "hardwareId": "GSM780F", "displayName": "32GS95UV family" }
   ],
   "editingNotes": [

@@ -5,3 +5,10 @@
 *.dll binary
 *.pdb binary
 *.zip binary
+docs/verification/osd-standing-instruction/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/verification/closed-hold-probe/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/verification/persistent-quiet/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/verification/persistent-close/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/verification/persistent-close-review-fix/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/verification/persistent-close-startup-overlap/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/verification/reference-persistent/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
